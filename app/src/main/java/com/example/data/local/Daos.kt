@@ -86,6 +86,27 @@ interface ChatMessageDao {
 }
 
 @Dao
+interface ConversationDao {
+    @Query("SELECT * FROM chat_conversations ORDER BY time ASC")
+    fun getAllConversations(): Flow<List<ChatConversation>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertConversations(conversations: List<ChatConversation>)
+}
+
+@Dao
+interface ThreadMessageDao {
+    @Query("SELECT * FROM chat_thread_messages ORDER BY id ASC")
+    fun getAllMessages(): Flow<List<ChatThreadMessage>>
+
+    @Query("SELECT * FROM chat_thread_messages WHERE conversationId = :conversationId ORDER BY id ASC")
+    fun getMessagesForConversation(conversationId: String): Flow<List<ChatThreadMessage>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMessages(messages: List<ChatThreadMessage>)
+}
+
+@Dao
 interface DocumentDao {
     @Query("SELECT * FROM digital_documents ORDER BY id DESC")
     fun getAllDocuments(): Flow<List<DigitalDocument>>
