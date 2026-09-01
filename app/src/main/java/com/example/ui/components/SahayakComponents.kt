@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.data.model.*
 import com.example.ui.theme.*
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -157,30 +159,36 @@ fun SahayakTopBar(
 }
 
 /**
- * Human-in-the-Loop OCR Verification Dialog
- * Mandate: OCR-extracted ledger entries must always be user-confirmed/editable before saving!
+ * Side-by-Side Review Screen & Human-in-the-Loop Verification
+ * Mandate: OCR-extracted ledger entries must always be user-confirmed & labeled before official saving!
  */
 @Composable
 fun OcrConfirmationDialog(
     parsedItems: List<OcrParsedItem>,
     isHindi: Boolean,
     onDismiss: () -> Unit,
-    onConfirm: (List<OcrParsedItem>) -> Unit
+    onConfirm: (List<OcrParsedItem>) -> Unit,
+    onConfirmWithDetails: ((label: String, description: String, category: DocumentCategory, items: List<OcrParsedItem>) -> Unit)? = null
 ) {
     var editableItems by remember { mutableStateOf(parsedItems) }
+    var khataLabel by remember { mutableStateOf("March 2026 — Grocery Shop") }
+    var khataNotes by remember { mutableStateOf("") }
+    var selectedCategory by remember { mutableStateOf(DocumentCategory.SUPPLIER_BILL) }
+
+    val lowConfidenceCount = editableItems.count { it.isLowConfidence || it.confidence < 0.80f }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
                 .wrapContentHeight()
-                .padding(8.dp),
+                .padding(4.dp),
             shape = RoundedCornerShape(20.dp),
             color = PureWhite,
             tonalElevation = 6.dp
         ) {
             Column(
-                modifier = Modifier.padding(18.dp)
+                modifier = Modifier.padding(16.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -188,64 +196,125 @@ fun OcrConfirmationDialog(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(38.dp)
                             .clip(CircleShape)
                             .background(Emerald100),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Filled.DocumentScanner, contentDescription = null, tint = Emerald800)
+                        Icon(Icons.Filled.DocumentScanner, contentDescription = null, tint = Emerald800, modifier = Modifier.size(20.dp))
                     }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (isHindi) "खाता स्कैन समीक्षा (OCR पुष्टि)" else "Verify Scanned Khata Entries",
+                            text = if (isHindi) "खाता स्कैन समीक्षा (Side-by-Side Review)" else "Side-by-Side Khata Review",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
+                            fontSize = 15.sp,
                             color = Slate900
                         )
                         Text(
-                            text = if (isHindi) "कृपया लेन-देन की जांच करें और पुष्टि करें" else "Human-in-the-loop review before official saving",
-                            fontSize = 12.sp,
+                            text = if (isHindi) "मूल पर्ची प्रविष्टियां जांचें व लेबल लगाएं" else "Verify extracted rows and add Khata label",
+                            fontSize = 11.sp,
                             color = Slate500
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-                Surface(
-                    color = Amber50,
-                    shape = RoundedCornerShape(10.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Amber300)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                // Low Confidence Warning Alert
+                if (lowConfidenceCount > 0) {
+                    Surface(
+                        color = Color(0xFFFEF2F2),
+                        shape = RoundedCornerShape(8.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFCA5A5))
                     ) {
-                        Icon(Icons.Filled.Info, contentDescription = null, tint = Amber700, modifier = Modifier.size(18.dp))
-                        Text(
-                            text = if (isHindi) "हस्तलिखित खाता से ${parsedItems.size} प्रविष्टियां पहचानी गईं। नाम व रकम जांचें।"
-                            else "Extracted ${parsedItems.size} items from handwritten Khata. Edit if needed.",
-                            fontSize = 12.sp,
-                            color = Amber800
-                        )
+                        Row(
+                            modifier = Modifier.padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(Icons.Filled.Warning, contentDescription = null, tint = UdhaarRed, modifier = Modifier.size(16.dp))
+                            Text(
+                                text = if (isHindi) "⚠️ $lowConfidenceCount प्रविष्टि में OCR विश्वास कम है। कृपया पीली पट्टी वाली रकम जांचें।"
+                                else "⚠️ $lowConfidenceCount item(s) flagged for review due to low OCR confidence.",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = UdhaarRed
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                // Khata Label & Notes Fields
+                OutlinedTextField(
+                    value = khataLabel,
+                    onValueChange = { khataLabel = it },
+                    label = { Text(if (isHindi) "खाता का नाम/लेबल (Khata Label)" else "Khata Label (e.g. March Grocery)", fontSize = 11.sp) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Slate900, unfocusedTextColor = Slate900),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                OutlinedTextField(
+                    value = khataNotes,
+                    onValueChange = { khataNotes = it },
+                    label = { Text(if (isHindi) "अतिरिक्त विवरण/नोट (optional)" else "Description / Notes", fontSize = 11.sp) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Slate900, unfocusedTextColor = Slate900),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (isHindi) "डिजिटल तालिका (${editableItems.size} प्रविष्टियां):" else "Extracted Table (${editableItems.size} rows):",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Slate900
+                    )
+                    TextButton(
+                        onClick = {
+                            editableItems = editableItems + OcrParsedItem(
+                                date = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date()),
+                                partyName = "New Party",
+                                description = "Manual entry item",
+                                amount = 100.0,
+                                type = LedgerType.CREDIT,
+                                category = LedgerCategory.SALES,
+                                confidence = 1.0f,
+                                isLowConfidence = false,
+                                editedByUser = true
+                            )
+                        },
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text(if (isHindi) "पंक्ति जोड़ें" else "Add Row", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 280.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                        .heightIn(max = 240.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     itemsIndexed(editableItems) { index, item ->
                         OcrItemEditCard(
                             item = item,
                             isHindi = isHindi,
                             onUpdate = { updated ->
-                                editableItems = editableItems.toMutableList().also { it[index] = updated }
+                                editableItems = editableItems.toMutableList().also { it[index] = updated.copy(editedByUser = true) }
                             },
                             onDelete = {
                                 editableItems = editableItems.toMutableList().also { it.removeAt(index) }
@@ -254,11 +323,11 @@ fun OcrConfirmationDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedButton(
                         onClick = onDismiss,
@@ -266,19 +335,25 @@ fun OcrConfirmationDialog(
                             .weight(1f)
                             .testTag("ocr_cancel_button")
                     ) {
-                        Text(if (isHindi) "रद्द करें" else "Cancel")
+                        Text(if (isHindi) "रद्द करें" else "Cancel", fontSize = 12.sp)
                     }
 
                     Button(
-                        onClick = { onConfirm(editableItems) },
+                        onClick = {
+                            if (onConfirmWithDetails != null) {
+                                onConfirmWithDetails(khataLabel, khataNotes, selectedCategory, editableItems)
+                            } else {
+                                onConfirm(editableItems)
+                            }
+                        },
                         modifier = Modifier
                             .weight(1.5f)
                             .testTag("ocr_confirm_save_button"),
-                        colors = ButtonDefaults.buttonColors(containerColor = Emerald700)
+                        colors = ButtonDefaults.buttonColors(containerColor = Emerald800, contentColor = PureWhite)
                     ) {
-                        Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(if (isHindi) "खाते में दर्ज करें" else "Save to Khata", fontWeight = FontWeight.Bold)
+                        Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(if (isHindi) "सहेजें व पुष्टि करें" else "Confirm & Save", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     }
                 }
             }
@@ -296,31 +371,44 @@ fun OcrItemEditCard(
     var partyName by remember { mutableStateOf(item.partyName) }
     var amountStr by remember { mutableStateOf(item.amount.toString()) }
     var isCredit by remember { mutableStateOf(item.type == LedgerType.CREDIT) }
+    val isFlagged = item.isLowConfidence || item.confidence < 0.80f
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Slate50),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Slate200)
+        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.cardColors(containerColor = if (isFlagged) Amber50 else Slate50),
+        border = androidx.compose.foundation.BorderStroke(1.dp, if (isFlagged) Amber600 else Slate200)
     ) {
-        Column(modifier = Modifier.padding(10.dp)) {
+        Column(modifier = Modifier.padding(8.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                // Type selector: Jama (Credit) vs Udhaar (Debit)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (isFlagged) {
+                        Surface(
+                            color = Amber700,
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = "⚠️ Review OCR",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = PureWhite,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
+
+                    // Type selector: Jama (Credit) vs Udhaar (Debit)
                     FilterChip(
                         selected = isCredit,
                         onClick = {
                             isCredit = true
                             onUpdate(item.copy(type = LedgerType.CREDIT, category = LedgerCategory.SALES))
                         },
-                        label = { Text(if (isHindi) "जमा (आय)" else "Credit (+)", fontSize = 11.sp) },
-                        leadingIcon = {
-                            if (isCredit) Icon(Icons.Filled.ArrowDownward, contentDescription = null, tint = JamaGreen, modifier = Modifier.size(14.dp))
-                        },
+                        label = { Text(if (isHindi) "जमा (+)" else "Credit (+)", fontSize = 10.sp) },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = JamaGreenBg,
                             selectedLabelColor = JamaGreen
@@ -333,10 +421,7 @@ fun OcrItemEditCard(
                             isCredit = false
                             onUpdate(item.copy(type = LedgerType.DEBIT, category = LedgerCategory.CUSTOMER_UDHAAR))
                         },
-                        label = { Text(if (isHindi) "उधार (देना)" else "Debit (-)", fontSize = 11.sp) },
-                        leadingIcon = {
-                            if (!isCredit) Icon(Icons.Filled.ArrowUpward, contentDescription = null, tint = UdhaarRed, modifier = Modifier.size(14.dp))
-                        },
+                        label = { Text(if (isHindi) "उधार (-)" else "Debit (-)", fontSize = 10.sp) },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = UdhaarRedBg,
                             selectedLabelColor = UdhaarRed
@@ -344,21 +429,21 @@ fun OcrItemEditCard(
                     )
                 }
 
-                IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Filled.DeleteOutline, contentDescription = "Delete item", tint = UdhaarRed, modifier = Modifier.size(18.dp))
+                IconButton(onClick = onDelete, modifier = Modifier.size(24.dp)) {
+                    Icon(Icons.Filled.DeleteOutline, contentDescription = "Delete item", tint = UdhaarRed, modifier = Modifier.size(16.dp))
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 OutlinedTextField(
                     value = partyName,
                     onValueChange = {
                         partyName = it
                         onUpdate(item.copy(partyName = it))
                     },
-                    label = { Text(if (isHindi) "पार्टी / ग्राहक" else "Party Name", fontSize = 11.sp) },
+                    label = { Text(if (isHindi) "विवरण / ग्राहक" else "Party / Desc", fontSize = 10.sp) },
                     modifier = Modifier.weight(1.3f),
                     singleLine = true
                 )
@@ -370,7 +455,7 @@ fun OcrItemEditCard(
                         val num = it.toDoubleOrNull() ?: item.amount
                         onUpdate(item.copy(amount = num))
                     },
-                    label = { Text("₹ Amount", fontSize = 11.sp) },
+                    label = { Text("₹ Amount", fontSize = 10.sp) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.weight(0.9f),
                     singleLine = true

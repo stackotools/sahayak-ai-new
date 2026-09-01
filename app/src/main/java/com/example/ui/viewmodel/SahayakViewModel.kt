@@ -125,6 +125,12 @@ class SahayakViewModel(application: Application) : AndroidViewModel(application)
     private val _ocrReviewItems = MutableStateFlow<List<OcrParsedItem>?>(null)
     val ocrReviewItems: StateFlow<List<OcrParsedItem>?> = _ocrReviewItems
 
+    private val _scannedKhataImageUri = MutableStateFlow<String?>(null)
+    val scannedKhataImageUri: StateFlow<String?> = _scannedKhataImageUri
+
+    private val _scannedKhataSource = MutableStateFlow("camera") // "camera" | "gallery" | "import"
+    val scannedKhataSource: StateFlow<String> = _scannedKhataSource
+
     // Calculators state
     private val _growthSimResult = MutableStateFlow<GrowthSimResult?>(null)
     val growthSimResult: StateFlow<GrowthSimResult?> = _growthSimResult
@@ -268,34 +274,72 @@ class SahayakViewModel(application: Application) : AndroidViewModel(application)
 
     // --- KHATA & OCR DIGITIZATION ---
 
-    fun startOcrScan(rawText: String) {
+    fun startOcrScan(rawText: String, imageUri: String? = null, source: String = "camera") {
+        _scannedKhataImageUri.value = imageUri
+        _scannedKhataSource.value = source
         val parsed = ocrParser.parseKhataText(rawText)
+        _ocrReviewItems.value = parsed
+    }
+
+    fun startCsvImport(csvContent: String) {
+        _scannedKhataImageUri.value = null
+        _scannedKhataSource.value = "import"
+        val parsed = ocrParser.parseCsvText(csvContent)
         _ocrReviewItems.value = parsed
     }
 
     fun clearOcrReview() {
         _ocrReviewItems.value = null
+        _scannedKhataImageUri.value = null
+    }
+
+    fun confirmScannedKhataSession(
+        label: String,
+        description: String,
+        category: DocumentCategory = DocumentCategory.SUPPLIER_BILL,
+        items: List<OcrParsedItem>
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val imageUri = _scannedKhataImageUri.value
+            val source = _scannedKhataSource.value
+            repository.saveScannedKhataSession(
+                label = label,
+                description = description,
+                category = category,
+                imageUri = imageUri,
+                source = source,
+                items = items
+            )
+            _ocrReviewItems.value = null
+            _scannedKhataImageUri.value = null
+        }
     }
 
     fun confirmOcrEntries(confirmedItems: List<OcrParsedItem>) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT)
-            val today = sdf.format(Date())
+        confirmScannedKhataSession(
+            label = "Khata Scan #${(100..999).random()}",
+            description = "Scanned handwritten Khata entry session",
+            category = DocumentCategory.SUPPLIER_BILL,
+            items = confirmedItems
+        )
+    }
 
-            val entries = confirmedItems.map { item ->
-                LedgerEntry(
-                    date = today,
-                    partyName = item.partyName,
-                    description = item.description,
-                    amount = item.amount,
-                    type = item.type,
-                    category = item.category,
-                    source = LedgerSource.OCR,
-                    isConfirmed = true
-                )
-            }
-            repository.addLedgerEntries(entries)
-            _ocrReviewItems.value = null
+    fun getEntriesForKhata(khataId: Long): Flow<List<LedgerEntry>> {
+        return repository.getEntriesForKhata(khataId)
+    }
+
+    fun getCommodityForecastForDescription(description: String): com.example.data.ml.CommodityMlForecast? {
+        val lower = description.lowercase(Locale.ROOT)
+        return allCommodityForecasts.firstOrNull { fc ->
+            lower.contains(fc.nameEn.lowercase(Locale.ROOT)) ||
+            lower.contains(fc.nameHi) ||
+            (fc.nameEn.contains("Wheat", ignoreCase = true) && (lower.contains("aata") || lower.contains("gehu") || lower.contains("गेहूं") || lower.contains("atta"))) ||
+            (fc.nameEn.contains("Mustard", ignoreCase = true) && (lower.contains("oil") || lower.contains("sarson") || lower.contains("तेल"))) ||
+            (fc.nameEn.contains("Tomato", ignoreCase = true) && (lower.contains("tomato") || lower.contains("tamatar") || lower.contains("टमाटर"))) ||
+            (fc.nameEn.contains("Potato", ignoreCase = true) && (lower.contains("potato") || lower.contains("aaloo") || lower.contains("आलू"))) ||
+            (fc.nameEn.contains("Milk", ignoreCase = true) && (lower.contains("milk") || lower.contains("doodh") || lower.contains("दूध"))) ||
+            (fc.nameEn.contains("Onion", ignoreCase = true) && (lower.contains("onion") || lower.contains("pyaz") || lower.contains("प्याज़"))) ||
+            (fc.nameEn.contains("Rice", ignoreCase = true) && (lower.contains("rice") || lower.contains("chawal") || lower.contains("चावल")))
         }
     }
 

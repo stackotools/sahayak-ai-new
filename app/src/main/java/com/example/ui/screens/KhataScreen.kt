@@ -61,22 +61,14 @@ fun KhataScreen(
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicturePreview()
     ) { bitmap: Bitmap? ->
-        // When camera photo is captured, run OCR extraction and save to Document Vault
-        val docTitle = "Camera Receipt Scan #${(100..999).random()}"
+        val docTitle = "March 2026 — Camera Khata Scan"
         lastScannedDocTitle = docTitle
         val simulatedExtractedText = """
-            किराना स्टोर बिल / पर्ची
-            आटा 10kg - 380 रु
-            सरसों तेल 2L - 280 रु
-            चीनी 5kg - 210 रु
-            कुल योग: 870 रु
+            2026-08-31 Ramesh Kumar ration aata dal Rs 1450 udhaar
+            2026-08-31 Daily counter cash sales ₹3280 jama
+            2026-08-31 Mustard oil tins wholesale ₹2600 kharch
         """.trimIndent()
-        viewModel.processCameraScanAndAddToLocker(
-            photoTitle = docTitle,
-            category = DocumentCategory.SUPPLIER_BILL,
-            rawOcrText = simulatedExtractedText
-        )
-        showCameraScanSuccessDialog = true
+        viewModel.startOcrScan(simulatedExtractedText, imageUri = "camera_captured_photo.jpg", source = "camera")
     }
 
     val filteredEntries = when (selectedFilter) {
@@ -208,13 +200,13 @@ fun KhataScreen(
                             }
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = if (isHindi) "कैमरा स्कैन से खाता व दस्तावेज़ लॉकर" else "Camera Scan to Khata & Vault",
+                                    text = if (isHindi) "हस्तलिखित खाता स्कैन व डिजिटल लॉकर" else "Scan Handwritten Khata & Save to Vault",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp,
                                     color = Amber900
                                 )
                                 Text(
-                                    text = if (isHindi) "कागजी पर्ची का फोटो लें - OCR से खाता दर्ज होगा व लॉकर में सुरक्षित रहेगा" else "Snap photo: Auto extracts OCR & saves into Account Document Vault",
+                                    text = if (isHindi) "कागजी पर्ची का फोटो लें - OCR निष्कर्षण, साइड-बाय-साइड समीक्षा व लेबल सुरक्षित रहेगा" else "Snap photo: Layout-preserving OCR with side-by-side review & custom Khata labels",
                                     fontSize = 11.sp,
                                     color = Slate900
                                 )
@@ -251,14 +243,14 @@ fun KhataScreen(
                             ) {
                                 Icon(Icons.Filled.TextFields, contentDescription = null, tint = Slate800, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text(if (isHindi) "टेक्स्ट पर्ची" else "Text / OCR", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Slate900)
+                                Text(if (isHindi) "टेक्स्ट/CSV स्कैन" else "OCR / CSV", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Slate900)
                             }
                         }
                     }
                 }
             }
 
-            // 3. Section Switcher Tabs: [Ledger Entries] vs [Digital Document Locker]
+            // 3. Section Switcher Tabs: [Ledger Entries] vs [Scanned Khatas & Vault]
             item {
                 TabRow(
                     selectedTabIndex = activeViewMode.ordinal,
@@ -282,7 +274,7 @@ fun KhataScreen(
                         onClick = { activeViewMode = KhataViewMode.DOCUMENT_LOCKER },
                         text = {
                             Text(
-                                text = if (isHindi) "🗄️ दस्तावेज़ लॉकर (${digitalDocs.size})" else "🗄️ Vault (${digitalDocs.size})",
+                                text = if (isHindi) "🗄️ स्कैन खाता लॉकर (${digitalDocs.size})" else "🗄️ Scanned Khatas (${digitalDocs.size})",
                                 fontWeight = FontWeight.Bold,
                                 color = if (activeViewMode == KhataViewMode.DOCUMENT_LOCKER) Emerald900 else Slate700
                             )
@@ -374,8 +366,10 @@ fun KhataScreen(
                     }
                 } else {
                     items(filteredEntries, key = { it.id }) { entry ->
+                        val commodityForecast = viewModel.getCommodityForecastForDescription(entry.description)
                         LedgerEntryCard(
                             entry = entry,
+                            commodityForecast = commodityForecast,
                             isHindi = isHindi,
                             onSendWhatsApp = { selectedWhatsAppReminderEntry = entry },
                             onDelete = { viewModel.deleteLedgerEntry(entry.id) }
@@ -383,10 +377,10 @@ fun KhataScreen(
                     }
                 }
             } else {
-                // DIGITAL DOCUMENT LOCKER VIEW
+                // DIGITAL DOCUMENT / SCANNED KHATA VAULT VIEW
                 item {
                     Text(
-                        text = if (isHindi) "खाता से जुड़े डिजिटल दस्तावेज़ व रसीदें:" else "Digital Receipts & Scanned Documents in your Account:",
+                        text = if (isHindi) "स्कैन किए गए खाता दस्तावेज़ व डिजिटल पर्चियां:" else "Scanned Khatas & Preserved Digital Ledgers:",
                         style = MaterialTheme.typography.labelLarge.copy(
                             fontWeight = FontWeight.Bold,
                             color = Slate900
@@ -411,7 +405,7 @@ fun KhataScreen(
                                 Icon(Icons.Default.FolderOpen, contentDescription = null, tint = Slate400, modifier = Modifier.size(44.dp))
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    text = if (isHindi) "लॉकर में कोई दस्तावेज़ नहीं है" else "No documents saved in vault yet",
+                                    text = if (isHindi) "लॉकर में कोई स्कैन खाता नहीं है" else "No scanned Khatas saved yet",
                                     fontSize = 14.sp,
                                     color = Slate900,
                                     fontWeight = FontWeight.Bold
@@ -462,97 +456,130 @@ fun KhataScreen(
         )
     }
 
-    // Camera Scan Success Dialog
-    if (showCameraScanSuccessDialog) {
-        AlertDialog(
-            onDismissRequest = { showCameraScanSuccessDialog = false },
-            title = {
-                Text(
-                    text = if (isHindi) "✅ पर्ची सफलतापूर्वक स्कैन हुई!" else "✅ Document Scanned & Saved!",
-                    fontWeight = FontWeight.Bold,
-                    color = Slate900
-                )
-            },
-            text = {
-                Column {
-                    Text(
-                        text = if (isHindi)
-                            "'$lastScannedDocTitle' को आपके डिजिटल दस्तावेज़ लॉकर में सहेज दिया गया है और बहीखाते के लिए OCR प्रविष्टियां निकाल ली गई हैं।"
-                        else
-                            "'$lastScannedDocTitle' has been preserved in your Account Digital Document Vault and OCR items extracted for review.",
-                        color = Slate800,
-                        fontSize = 14.sp
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showCameraScanSuccessDialog = false
-                        onOpenOcrScan()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Emerald800, contentColor = PureWhite)
-                ) {
-                    Text(if (isHindi) "प्रविष्टियां जांचें (Review OCR)" else "Review Extracted Entries", color = PureWhite)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCameraScanSuccessDialog = false }) {
-                    Text("OK", color = Slate800)
-                }
-            }
-        )
-    }
-
-    // Document Detail Dialog
+    // Document Detail / Scanned Khata View Dialog
     selectedDocDetail?.let { doc ->
+        val linkedEntries by viewModel.getEntriesForKhata(doc.id).collectAsState(initial = emptyList())
+
         AlertDialog(
             onDismissRequest = { selectedDocDetail = null },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(text = doc.category.icon, fontSize = 22.sp)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = doc.title,
-                        fontWeight = FontWeight.Bold,
-                        color = Slate900,
-                        style = MaterialTheme.typography.titleMedium
-                    )
+                    Column {
+                        Text(
+                            text = if (doc.label.isNotBlank()) doc.label else doc.title,
+                            fontWeight = FontWeight.Bold,
+                            color = Slate900,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        if (doc.description.isNotBlank()) {
+                            Text(text = doc.description, fontSize = 11.sp, color = Slate700)
+                        }
+                    }
                 }
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "📅 ${if (isHindi) "दिनांक:" else "Date:"} ${doc.dateAdded}",
-                        style = MaterialTheme.typography.bodyMedium.copy(color = Slate800, fontWeight = FontWeight.SemiBold)
-                    )
-                    Text(
-                        text = "💰 ${if (isHindi) "कुल राशि:" else "Total Amount:"} ₹${String.format(Locale.ROOT, "%,.0f", doc.totalAmount)}",
-                        style = MaterialTheme.typography.bodyLarge.copy(color = Emerald900, fontWeight = FontWeight.Bold)
-                    )
-                    Text(
-                        text = "🏷️ ${if (isHindi) "श्रेणी:" else "Category:"} ${if (isHindi) doc.category.labelHi else doc.category.label}",
-                        style = MaterialTheme.typography.bodyMedium.copy(color = Slate800)
-                    )
+                Column(
+                    modifier = Modifier.heightIn(max = 380.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "📅 ${doc.dateAdded}",
+                            style = MaterialTheme.typography.bodySmall.copy(color = Slate800, fontWeight = FontWeight.SemiBold)
+                        )
+                        Surface(
+                            color = Amber100,
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = "Source: ${doc.source.uppercase()}",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Slate900,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
 
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = Slate200)
+                    // Mini P&L
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Slate100,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Slate200)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp),
+                            horizontalArrangement = Arrangement.SpaceAround
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(if (isHindi) "कुल जमा" else "Jama (+)", fontSize = 10.sp, color = JamaGreen, fontWeight = FontWeight.Bold)
+                                Text("₹${String.format(Locale.ROOT, "%,.0f", doc.totalCredit)}", fontSize = 13.sp, fontWeight = FontWeight.Black, color = JamaGreen)
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(if (isHindi) "कुल उधार" else "Udhaar (-)", fontSize = 10.sp, color = UdhaarRed, fontWeight = FontWeight.Bold)
+                                Text("₹${String.format(Locale.ROOT, "%,.0f", doc.totalDebit)}", fontSize = 13.sp, fontWeight = FontWeight.Black, color = UdhaarRed)
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(if (isHindi) "नेट योग" else "Total Amount", fontSize = 10.sp, color = Slate900, fontWeight = FontWeight.Bold)
+                                Text("₹${String.format(Locale.ROOT, "%,.0f", doc.totalAmount)}", fontSize = 13.sp, fontWeight = FontWeight.Black, color = Slate900)
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp), color = Slate200)
 
                     Text(
-                        text = if (isHindi) "OCR निकाला गया विवरण (Extracted Text):" else "OCR Extracted Text:",
+                        text = if (isHindi) "डिजिटाइज़्ड प्रविष्टियां (${linkedEntries.size}):" else "Digitized Entries (${linkedEntries.size}):",
                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, color = Slate900)
                     )
 
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = Slate100,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Slate300),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = doc.extractedText,
-                            style = MaterialTheme.typography.bodySmall.copy(color = Slate900),
-                            modifier = Modifier.padding(10.dp)
-                        )
+                    if (linkedEntries.isEmpty()) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Slate100,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = doc.extractedText.ifBlank { "Original OCR Text Preserved." },
+                                style = MaterialTheme.typography.bodySmall.copy(color = Slate900),
+                                modifier = Modifier.padding(8.dp)
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.heightIn(max = 200.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            items(linkedEntries) { e ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (e.type == LedgerType.CREDIT) JamaGreenBg else UdhaarRedBg)
+                                        .padding(8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text(text = e.partyName, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Slate900)
+                                        Text(text = "${e.date} • ${e.description}", fontSize = 10.sp, color = Slate700)
+                                    }
+                                    Text(
+                                        text = "${if (e.type == LedgerType.CREDIT) "+" else "-"} ₹${String.format(Locale.ROOT, "%,.0f", e.amount)}",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = if (e.type == LedgerType.CREDIT) JamaGreen else UdhaarRed
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             },
@@ -605,18 +632,18 @@ fun DigitalDocCard(
 
                 Column {
                     Text(
-                        text = doc.title,
+                        text = if (doc.label.isNotBlank()) doc.label else doc.title,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
                         color = Slate900
                     )
                     Text(
-                        text = if (isHindi) doc.category.labelHi else doc.category.label,
-                        fontSize = 12.sp,
+                        text = if (doc.description.isNotBlank()) doc.description else (if (isHindi) doc.category.labelHi else doc.category.label),
+                        fontSize = 11.sp,
                         color = Slate700
                     )
                     Text(
-                        text = "📅 ${doc.dateAdded} • ${doc.parsedEntryCount} ${if (isHindi) "प्रविष्टियां" else "items"}",
+                        text = "📅 ${doc.dateAdded} • ${doc.parsedEntryCount} ${if (isHindi) "प्रविष्टियां" else "items"} • ${doc.source}",
                         fontSize = 10.sp,
                         color = Slate500
                     )
@@ -641,6 +668,7 @@ fun DigitalDocCard(
 @Composable
 fun LedgerEntryCard(
     entry: LedgerEntry,
+    commodityForecast: com.example.data.ml.CommodityMlForecast? = null,
     isHindi: Boolean,
     onSendWhatsApp: () -> Unit,
     onDelete: () -> Unit
@@ -691,6 +719,29 @@ fun LedgerEntryCard(
                             fontSize = 12.sp,
                             color = Slate700
                         )
+
+                        // Agmarknet Commodity Forecast Link Badge
+                        if (commodityForecast != null) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Surface(
+                                color = Emerald100,
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Text(
+                                        text = "${commodityForecast.trendDirection.icon} ${commodityForecast.nameEn}: ${commodityForecast.procurementActionHi}",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Emerald900
+                                    )
+                                }
+                            }
+                        }
+
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp),

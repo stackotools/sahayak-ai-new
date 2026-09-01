@@ -9,6 +9,9 @@ interface LedgerDao {
     @Query("SELECT * FROM ledger_entries ORDER BY date DESC, id DESC")
     fun getAllEntries(): Flow<List<LedgerEntry>>
 
+    @Query("SELECT * FROM ledger_entries WHERE khataId = :khataId ORDER BY id ASC")
+    fun getEntriesForKhata(khataId: Long): Flow<List<LedgerEntry>>
+
     @Query("SELECT * FROM ledger_entries WHERE isConfirmed = 0 ORDER BY id DESC")
     fun getPendingEntries(): Flow<List<LedgerEntry>>
 

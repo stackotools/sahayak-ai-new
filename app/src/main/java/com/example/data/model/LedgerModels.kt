@@ -46,12 +46,18 @@ enum class DocumentCategory(val label: String, val labelHi: String, val icon: St
 data class DigitalDocument(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val title: String,
+    val label: String = "",
+    val description: String = "",
     val category: DocumentCategory = DocumentCategory.SUPPLIER_BILL,
     val dateAdded: String,
     val totalAmount: Double,
+    val totalCredit: Double = 0.0,
+    val totalDebit: Double = 0.0,
     val imageUri: String? = null,
     val extractedText: String = "",
     val parsedEntryCount: Int = 1,
+    val source: String = "camera", // "camera" | "gallery" | "import"
+    val status: String = "confirmed", // "processing" | "needs_review" | "confirmed"
     val isSyncedToKhata: Boolean = true,
     val notes: String = ""
 )
@@ -82,6 +88,7 @@ enum class LedgerCategory(val label: String, val labelHi: String) {
 @Entity(tableName = "ledger_entries")
 data class LedgerEntry(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val khataId: Long? = null, // Links to DigitalDocument id
     val date: String, // YYYY-MM-DD
     val partyName: String, // Customer or Supplier Name
     val description: String,
@@ -91,14 +98,21 @@ data class LedgerEntry(
     val source: LedgerSource = LedgerSource.MANUAL,
     val isConfirmed: Boolean = true, // Human-in-the-loop review flag
     val customerPhone: String? = null,
+    val rawText: String = "",
+    val confidence: Float = 0.95f,
+    val editedByUser: Boolean = false,
     val createdAt: Long = System.currentTimeMillis()
 )
 
 data class OcrParsedItem(
+    val date: String = "",
     val partyName: String,
     val description: String,
     val amount: Double,
     val type: LedgerType,
     val category: LedgerCategory,
-    val confidence: Float = 0.92f
+    val confidence: Float = 0.92f,
+    val rawText: String = "",
+    val isLowConfidence: Boolean = false,
+    val editedByUser: Boolean = false
 )

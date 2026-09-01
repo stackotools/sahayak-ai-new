@@ -76,38 +76,32 @@ fun SahayakApp(viewModel: SahayakViewModel) {
 
     val isHindi = userProfile.preferredLanguage == AppLanguage.HINDI
 
-    // Community module is a full-screen section with its own internal top bar & bottom nav
-    val isCommunitySection = currentRoute == Screen.CommunityKyc.route
-
     var showManualAddDialog by remember { mutableStateOf(false) }
     var showOcrTextPromptDialog by remember { mutableStateOf(false) }
     var showProfileDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
-            if (!isCommunitySection) {
-                SahayakTopBar(
-                    currentLanguage = userProfile.preferredLanguage,
-                    onLanguageChange = { viewModel.setLanguage(it) },
-                    isSpeaking = isTtsSpeaking,
-                    onStopSpeaking = { viewModel.stopSpeaking() },
-                    onOpenProfile = { showProfileDialog = true },
-                    onOpenKyc = {
-                        navController.navigate(Screen.CommunityKyc.route) {
-                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
+            SahayakTopBar(
+                currentLanguage = userProfile.preferredLanguage,
+                onLanguageChange = { viewModel.setLanguage(it) },
+                isSpeaking = isTtsSpeaking,
+                onStopSpeaking = { viewModel.stopSpeaking() },
+                onOpenProfile = { showProfileDialog = true },
+                onOpenKyc = {
+                    navController.navigate(Screen.CommunityKyc.route) {
+                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
                     }
-                )
-            }
+                }
+            )
         },
         bottomBar = {
-            if (!isCommunitySection) {
-                NavigationBar(
-                    containerColor = PureWhite,
-                    tonalElevation = 8.dp
-                ) {
+            NavigationBar(
+                containerColor = PureWhite,
+                tonalElevation = 8.dp
+            ) {
                 bottomNavScreens.forEach { screen ->
                     val isSelected = currentRoute == screen.route
                     NavigationBarItem(
@@ -148,12 +142,11 @@ fun SahayakApp(viewModel: SahayakViewModel) {
                 }
             }
         }
-        }
     ) { innerPadding ->
         NavHost(
             navController = navController,
             startDestination = Screen.Home.route,
-            modifier = Modifier.padding(if (isCommunitySection) PaddingValues(0.dp) else innerPadding)
+            modifier = Modifier.padding(innerPadding)
         ) {
             composable(Screen.Home.route) {
                 HomeScreen(
@@ -203,18 +196,7 @@ fun SahayakApp(viewModel: SahayakViewModel) {
             }
 
             composable(Screen.CommunityKyc.route) {
-                CommunityAndKycScreen(
-                    viewModel = viewModel,
-                    onBack = {
-                        navController.navigate(Screen.Home.route) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    }
-                )
+                CommunityAndKycScreen(viewModel = viewModel)
             }
         }
     }
@@ -227,6 +209,9 @@ fun SahayakApp(viewModel: SahayakViewModel) {
             onDismiss = { viewModel.clearOcrReview() },
             onConfirm = { confirmed ->
                 viewModel.confirmOcrEntries(confirmed)
+            },
+            onConfirmWithDetails = { label, desc, category, confirmed ->
+                viewModel.confirmScannedKhataSession(label, desc, category, confirmed)
             }
         )
     }
@@ -243,9 +228,10 @@ fun SahayakApp(viewModel: SahayakViewModel) {
         )
     }
 
-    // OCR Scan Text Input / Preset Picker Dialog
+    // OCR Scan Text Input / Preset Picker / CSV Import Dialog
     if (showOcrTextPromptDialog) {
         var rawText by remember { mutableStateOf("") }
+        var isCsvMode by remember { mutableStateOf(false) }
         val presets = viewModel.getSampleKhataPresets()
 
         androidx.compose.ui.window.Dialog(onDismissRequest = { showOcrTextPromptDialog = false }) {
@@ -259,28 +245,53 @@ fun SahayakApp(viewModel: SahayakViewModel) {
             ) {
                 Column(modifier = Modifier.padding(18.dp)) {
                     Text(
-                        text = if (isHindi) "हस्तलिखित बहीखाता स्कैन (OCR)" else "Scan Handwritten Khata / Chit",
+                        text = if (isHindi) "हस्तलिखित खाता स्कैन / CSV इंपोर्ट" else "Scan Khata or Import CSV Statement",
                         fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                         fontSize = 16.sp,
                         color = Slate900
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = if (isHindi) "कागजी पर्ची का टेक्स्ट दर्ज करें या नीचे से नमूना खाता चुनें:" else "Paste raw scanned receipt/khata text or pick a realistic preset:",
+                        text = if (isHindi) "कागजी पर्ची का टेक्स्ट/CSV दर्ज करें या नीचे से नमूना खाता चुनें:" else "Paste raw scanned text / CSV statement or pick a realistic preset:",
                         fontSize = 12.sp,
                         color = Slate700
                     )
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    Text(if (isHindi) "त्वरित नमूना खाते:" else "Quick Realistic Presets:", fontSize = 11.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = Slate900)
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = !isCsvMode,
+                            onClick = { isCsvMode = false },
+                            label = { Text("📷 Khata Text / OCR", fontSize = 11.sp) }
+                        )
+                        FilterChip(
+                            selected = isCsvMode,
+                            onClick = { isCsvMode = true },
+                            label = { Text("📊 CSV Statement", fontSize = 11.sp) }
+                        )
+                    }
 
-                    presets.forEach { preset ->
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    if (!isCsvMode) {
+                        Text(if (isHindi) "त्वरित नमूना खाते:" else "Quick Realistic Presets:", fontSize = 11.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = Slate900)
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        presets.forEach { preset ->
+                            AssistChip(
+                                onClick = { rawText = preset.second },
+                                label = { Text(preset.first, fontSize = 11.sp, color = Slate900) },
+                                modifier = Modifier.padding(vertical = 2.dp)
+                            )
+                        }
+                    } else {
+                        Text(if (isHindi) "CSV नमूना (Date, Desc, Amount, Type):" else "Sample CSV Format:", fontSize = 11.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = Slate900)
                         AssistChip(
-                            onClick = { rawText = preset.second },
-                            label = { Text(preset.first, fontSize = 11.sp, color = Slate900) },
-                            modifier = Modifier.padding(vertical = 2.dp)
+                            onClick = {
+                                rawText = "Date, Description, Amount, Type\n2026-08-28, Suresh Verma ration, 1450, Debit\n2026-08-28, Daily Cash Counter, 3280, Credit\n2026-08-28, Kashi Wholesale Agency, 2600, Debit"
+                            },
+                            label = { Text("Paste Sample Bank/UPI CSV", fontSize = 11.sp, color = Slate900) }
                         )
                     }
 
@@ -289,11 +300,17 @@ fun SahayakApp(viewModel: SahayakViewModel) {
                     OutlinedTextField(
                         value = rawText,
                         onValueChange = { rawText = it },
-                        placeholder = { Text("e.g. Ramesh Kumar ration ₹850 udhaar\nCounter sales ₹3200 jama", color = Slate500) },
+                        placeholder = {
+                            Text(
+                                if (isCsvMode) "Date, Description, Amount, Type\n2026-08-28, Item Name, 1500, Credit"
+                                else "e.g. Ramesh Kumar ration ₹850 udhaar\nCounter sales ₹3200 jama",
+                                color = Slate500
+                            )
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(100.dp),
-                        maxLines = 4,
+                        maxLines = 5,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = Slate900,
                             unfocusedTextColor = Slate900
@@ -308,13 +325,17 @@ fun SahayakApp(viewModel: SahayakViewModel) {
                         }
                         Button(
                             onClick = {
-                                viewModel.startOcrScan(rawText)
+                                if (isCsvMode) {
+                                    viewModel.startCsvImport(rawText)
+                                } else {
+                                    viewModel.startOcrScan(rawText)
+                                }
                                 showOcrTextPromptDialog = false
                             },
                             modifier = Modifier.weight(1.3f),
                             colors = ButtonDefaults.buttonColors(containerColor = Amber600, contentColor = PureWhite)
                         ) {
-                            Text(if (isHindi) "OCR पार्स करें" else "Parse Entries", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                            Text(if (isHindi) "पार्स व समीक्षा करें" else "Parse & Review", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                         }
                     }
                 }

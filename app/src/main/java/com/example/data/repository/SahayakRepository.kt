@@ -110,6 +110,66 @@ class SahayakRepository(
         documentDao.deleteById(id)
     }
 
+    suspend fun saveScannedKhataSession(
+        label: String,
+        description: String,
+        category: DocumentCategory,
+        imageUri: String?,
+        source: String,
+        items: List<OcrParsedItem>
+    ): Long {
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT)
+        val today = sdf.format(Date())
+
+        val totalCredit = items.filter { it.type == LedgerType.CREDIT }.sumOf { it.amount }
+        val totalDebit = items.filter { it.type == LedgerType.DEBIT }.sumOf { it.amount }
+        val totalAmount = totalCredit + totalDebit
+
+        val doc = DigitalDocument(
+            title = if (label.isNotBlank()) label else "Khata Scan #${(100..999).random()}",
+            label = label.ifBlank { "Khata Scan" },
+            description = description,
+            category = category,
+            dateAdded = today,
+            totalAmount = totalAmount,
+            totalCredit = totalCredit,
+            totalDebit = totalDebit,
+            imageUri = imageUri,
+            extractedText = items.joinToString("\n") { "${it.date} ${it.partyName} - ₹${it.amount} (${it.type.name})" },
+            parsedEntryCount = items.size,
+            source = source,
+            status = "confirmed",
+            isSyncedToKhata = true,
+            notes = "Confirmed and saved into Khata ledger"
+        )
+
+        val khataId = documentDao.insertDocument(doc)
+
+        val entries = items.map { item ->
+            LedgerEntry(
+                khataId = khataId,
+                date = item.date.ifBlank { today },
+                partyName = item.partyName,
+                description = item.description,
+                amount = item.amount,
+                type = item.type,
+                category = item.category,
+                source = LedgerSource.OCR,
+                isConfirmed = true,
+                rawText = item.rawText,
+                confidence = item.confidence,
+                editedByUser = item.editedByUser
+            )
+        }
+        ledgerDao.insertEntries(entries)
+
+        return khataId
+    }
+
+    fun getEntriesForKhata(khataId: Long): Flow<List<LedgerEntry>> {
+        return ledgerDao.getEntriesForKhata(khataId)
+    }
+
     private suspend fun seedInitialDataIfEmpty() {
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT)
         val today = sdf.format(Date())
