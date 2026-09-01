@@ -1,16 +1,13 @@
 package com.example.ui.screens
 
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -19,99 +16,49 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
-import com.example.data.model.*
+import com.example.data.model.AppLanguage
+import com.example.data.model.CommunityPost
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.SahayakViewModel
+import java.util.Locale
 
-/**
- * Community Section — full-screen module with its own internal 4-tab bottom nav.
- * Main app's Home top bar & bottom nav are hidden while this section is active.
- */
 @Composable
 fun CommunityAndKycScreen(
-    viewModel: SahayakViewModel,
-    onBack: () -> Unit
+    viewModel: SahayakViewModel
 ) {
     val userProfile by viewModel.userProfile.collectAsState()
     val isHindi = userProfile.preferredLanguage == AppLanguage.HINDI
-    var selectedTab by remember { mutableStateOf(0) }
 
-    Scaffold(
-        containerColor = Slate50,
-        topBar = {
-            // Internal top bar: back arrow | title | notification
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(PureWhite)
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Slate800)
-                }
-                Text(
-                    text = if (selectedTab == 0) "Community" else if (selectedTab == 1) "Chats" else if (selectedTab == 2) "Advisor" else "Profile",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 20.sp,
-                    color = Slate900,
-                    modifier = Modifier.weight(1f)
+    var selectedTab by remember { mutableStateOf(0) }
+    val tabTitles = if (isHindi) listOf("समुदाय व अनुभव साझा", "KYC व बैंक खाता सैंडबॉक्स") else listOf("Peer Community", "KYC & Bank Sandbox")
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Slate50)
+    ) {
+        TabRow(
+            selectedTabIndex = selectedTab,
+            containerColor = PureWhite,
+            contentColor = Emerald800
+        ) {
+            tabTitles.forEachIndexed { index, title ->
+                Tab(
+                    selected = selectedTab == index,
+                    onClick = { selectedTab = index },
+                    text = { Text(title, fontWeight = FontWeight.Bold, fontSize = 12.sp) }
                 )
-                IconButton(onClick = { }) {
-                    Icon(Icons.Outlined.NotificationsNone, contentDescription = "Notifications", tint = Slate600)
-                }
-            }
-            HorizontalDivider(color = Slate200)
-        },
-        bottomBar = {
-            // Internal bottom nav: Community | Chats | Advisor | Profile
-            NavigationBar(
-                containerColor = PureWhite,
-                tonalElevation = 8.dp
-            ) {
-                listOf(
-                    Triple(0, if (selectedTab == 0) Icons.Filled.Groups else Icons.Outlined.Groups, if (isHindi) "समुदाय" else "Community"),
-                    Triple(1, if (selectedTab == 1) Icons.Filled.Forum else Icons.Outlined.Forum, if (isHindi) "चैट" else "Chats"),
-                    Triple(2, if (selectedTab == 2) Icons.Filled.SmartToy else Icons.Outlined.SmartToy, if (isHindi) "सलाहकार" else "Advisor"),
-                    Triple(3, if (selectedTab == 3) Icons.Filled.Person else Icons.Outlined.Person, if (isHindi) "प्रोफ़ाइल" else "Profile")
-                ).forEach { (index, icon, label) ->
-                    NavigationBarItem(
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index },
-                        icon = { Icon(icon, contentDescription = label) },
-                        label = {
-                            Text(
-                                text = label,
-                                fontSize = 9.sp,
-                                fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal
-                            )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Emerald900,
-                            selectedTextColor = Emerald900,
-                            indicatorColor = Emerald100,
-                            unselectedIconColor = Slate700,
-                            unselectedTextColor = Slate700
-                        ),
-                        modifier = Modifier.testTag("community_tab_$index")
-                    )
-                }
             }
         }
-    ) { innerPadding ->
-        Box(modifier = Modifier.padding(innerPadding)) {
-            when (selectedTab) {
-                0 -> CommunityFeedTab(viewModel = viewModel, isHindi = isHindi)
-                1 -> ChatsScreen(viewModel = viewModel)
-                2 -> AdvisorScreen(viewModel = viewModel)
-                3 -> ProfileScreen(viewModel = viewModel)
-            }
+
+        if (selectedTab == 0) {
+            CommunityFeedTab(viewModel = viewModel, isHindi = isHindi)
+        } else {
+            KycSandboxTab(viewModel = viewModel, isHindi = isHindi)
         }
     }
 }
@@ -122,143 +69,124 @@ fun CommunityFeedTab(
     isHindi: Boolean
 ) {
     val posts by viewModel.allPosts.collectAsState()
-    var selectedFilter by remember { mutableStateOf("All") }
     var showNewPostDialog by remember { mutableStateOf(false) }
 
-    val filters = listOf("All", "Success", "Question", "Update", "Tip")
-    val filterLabels = if (isHindi) listOf("सभी", "सफलता", "प्रश्न", "अपडेट", "टिप") else filters
-
-    val filteredPosts = if (selectedFilter == "All") posts else posts.filter {
-        it.postType.name == selectedFilter.uppercase()
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Slate50)
-    ) {
-        // Filter chips
-        LazyRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Slate50)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(filters.indices.toList()) { index ->
-                val isSelected = selectedFilter == filters[index]
-                val bgColor by animateColorAsState(if (isSelected) Emerald800 else Slate100, label = "chip_bg")
-                val textColor by animateColorAsState(if (isSelected) PureWhite else Slate700, label = "chip_text")
-                Surface(
-                    onClick = { selectedFilter = filters[index] },
-                    shape = RoundedCornerShape(20.dp),
-                    color = bgColor
-                ) {
-                    Text(
-                        text = filterLabels[index],
-                        fontSize = 13.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        color = textColor,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
-                    )
-                }
+    Scaffold(
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { showNewPostDialog = true },
+                containerColor = Emerald700,
+                contentColor = PureWhite,
+                shape = CircleShape
+            ) {
+                Icon(Icons.Filled.Edit, contentDescription = "Share Story")
             }
         }
-
-        // Feed
+    ) { padding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(padding)
                 .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(bottom = 100.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            contentPadding = PaddingValues(top = 12.dp, bottom = 80.dp)
         ) {
-            items(filteredPosts, key = { it.id }) { post ->
-                CommunityPostCard(
-                    post = post,
-                    onLike = { viewModel.togglePostLike(post) },
-                    onPlayVoice = { viewModel.speakText(post.content, if (isHindi) "hi" else "en") }
-                )
-            }
-
-            if (filteredPosts.isEmpty()) {
-                item {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
-                        contentAlignment = Alignment.Center
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = Emerald50),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Emerald200)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Outlined.Article, contentDescription = null, tint = Slate400, modifier = Modifier.size(48.dp))
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(if (isHindi) "इस श्रेणी में कोई पोस्ट नहीं" else "No posts in this category", color = Slate500, fontSize = 14.sp)
+                        Icon(Icons.Filled.Groups, contentDescription = null, tint = Emerald800)
+                        Column {
+                            Text(
+                                text = if (isHindi) "ग्रामीण उद्यमी समुदाय" else "Rural Entrepreneurs Community",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = Emerald900
+                            )
+                            Text(
+                                text = if (isHindi) "साथी दुकानदारों और महिला समूहों से सीखें और सुझाव साझा करें" else "Learn from fellow micro-entrepreneurs & SHG leaders",
+                                fontSize = 11.sp,
+                                color = Slate600
+                            )
                         }
                     }
                 }
             }
+
+            items(posts, key = { it.id }) { post ->
+                CommunityPostCard(
+                    post = post,
+                    isHindi = isHindi,
+                    onLike = { viewModel.togglePostLike(post) },
+                    onPlayVoice = {
+                        viewModel.speakText(post.content, if (isHindi) "hi" else "en")
+                    }
+                )
+            }
         }
     }
 
-    // Floating Action Button
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.BottomEnd
-    ) {
-        FloatingActionButton(
-            onClick = { showNewPostDialog = true },
-            containerColor = Emerald800,
-            contentColor = PureWhite,
-            shape = RoundedCornerShape(16.dp),
-            modifier = Modifier
-                .padding(end = 16.dp, bottom = 88.dp)
-                .size(56.dp)
-        ) {
-            Icon(Icons.Filled.Add, contentDescription = "Create Post", modifier = Modifier.size(28.dp))
-        }
-    }
-
-    // New Post Dialog
     if (showNewPostDialog) {
         var postContent by remember { mutableStateOf("") }
-        var postTag by remember { mutableStateOf("#BusinessTip") }
-        var selectedType by remember { mutableStateOf(PostType.BUSINESS_TIP) }
+        var postTag by remember { mutableStateOf("#KiranaProfit") }
 
         androidx.compose.ui.window.Dialog(onDismissRequest = { showNewPostDialog = false }) {
             Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .wrapContentHeight()
+                    .padding(8.dp),
+                shape = RoundedCornerShape(16.dp),
                 color = PureWhite
             ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Text(if (isHindi) "नया पोस्ट बनाएं" else "Create Post", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Slate900)
-                    Spacer(modifier = Modifier.height(12.dp))
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(if (isHindi) "अपना अनुभव या टिप साझा करें" else "Share Your Business Tip / Experience", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Spacer(modifier = Modifier.height(10.dp))
+
                     OutlinedTextField(
                         value = postContent,
                         onValueChange = { postContent = it },
-                        placeholder = { Text(if (isHindi) "अपना अनुभव साझा करें..." else "Share your experience...") },
-                        modifier = Modifier.fillMaxWidth().height(120.dp),
+                        placeholder = { Text(if (isHindi) "आपने दुकान या योजना में क्या नया किया..." else "Share how you boosted profit or used Mudra loan...") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp),
                         maxLines = 5
                     )
+
                     Spacer(modifier = Modifier.height(8.dp))
+
                     OutlinedTextField(
                         value = postTag,
                         onValueChange = { postTag = it },
-                        label = { Text("Tag") },
+                        label = { Text("Topic Tag (e.g. #MudraSuccess, #DairyTips)") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { showNewPostDialog = false }, modifier = Modifier.weight(1f)) { Text("Cancel") }
                         Button(
                             onClick = {
                                 if (postContent.isNotBlank()) {
-                                    viewModel.addCommunityPost(postContent, postTag, selectedType)
+                                    viewModel.addCommunityPost(postContent, postTag)
                                     showNewPostDialog = false
                                 }
                             },
                             modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = Emerald800)
-                        ) { Text("Post") }
+                            colors = ButtonDefaults.buttonColors(containerColor = Emerald700)
+                        ) {
+                            Text("Post")
+                        }
                     }
                 }
             }
@@ -269,139 +197,280 @@ fun CommunityFeedTab(
 @Composable
 fun CommunityPostCard(
     post: CommunityPost,
+    isHindi: Boolean,
     onLike: () -> Unit,
     onPlayVoice: () -> Unit
 ) {
-    val accentColor = when (post.postType) {
-        PostType.SUCCESS -> Color(0xFF1B5E20)
-        PostType.QUESTION -> Color(0xFF884200)
-        PostType.SCHEME_UPDATE -> Color(0xFF005DB7)
-        PostType.BUSINESS_TIP -> Emerald800
-    }
-
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = PureWhite),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        border = androidx.compose.foundation.BorderStroke(1.dp, Slate200)
     ) {
-        Column {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .background(accentColor.copy(alpha = 0.8f))
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(Emerald800),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(post.authorName.take(1), color = Amber300, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+                    Column {
+                        Text(post.authorName, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Slate900)
+                        Text(post.authorRole, fontSize = 10.sp, color = Slate500)
+                    }
+                }
+
+                Surface(color = Amber100, shape = RoundedCornerShape(6.dp)) {
+                    Text(post.tag, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Amber900, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = post.content,
+                fontSize = 12.sp,
+                color = Slate800,
+                lineHeight = 17.sp
             )
 
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+            if (post.voiceNoteSeconds != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onPlayVoice() },
+                    color = Emerald50
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(accentColor.copy(alpha = 0.2f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(post.authorName.take(1), color = accentColor, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        }
-                        Column {
-                            Text(post.authorName, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = Slate900)
-                            Text(post.authorRole, fontSize = 12.sp, color = Slate500)
-                        }
-                    }
-                    Surface(
-                        color = accentColor.copy(alpha = 0.12f),
-                        shape = RoundedCornerShape(6.dp)
+                    Row(
+                        modifier = Modifier.padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(
-                            text = post.postType.label,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = accentColor,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = Emerald800)
+                        Text("Voice Note (${post.voiceNoteSeconds}s) • Tap to listen", fontSize = 11.sp, color = Emerald900, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+            HorizontalDivider(color = Slate100)
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onLike, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            imageVector = if (post.isLikedByUser) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                            contentDescription = "Like",
+                            tint = if (post.isLikedByUser) UdhaarRed else Slate400,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
+                    Text("${post.likesCount}", fontSize = 11.sp, color = Slate600)
+
+                    Spacer(modifier = Modifier.width(16.dp))
+
+                    Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null, tint = Slate400, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("${post.commentsCount}", fontSize = 11.sp, color = Slate600)
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Text(post.createdAtFormatted, fontSize = 10.sp, color = Slate400)
+            }
+        }
+    }
+}
 
-                Text(
-                    text = post.content,
-                    fontSize = 14.sp,
-                    color = Slate800,
-                    lineHeight = 20.sp
-                )
+/**
+ * Swappable Mock KYC Sandbox (Mandate: Swappable Interface + Clear Demo Labels)
+ */
+@Composable
+fun KycSandboxTab(
+    viewModel: SahayakViewModel,
+    isHindi: Boolean
+) {
+    val panDetails by viewModel.panDetails.collectAsState()
+    val aadhaarDetails by viewModel.aadhaarDetails.collectAsState()
+    val bankAccount by viewModel.bankAccount.collectAsState()
+    val cibilReport by viewModel.cibilReport.collectAsState()
 
-                if (post.imageUrl != null) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    AsyncImage(
-                        model = post.imageUrl,
-                        contentDescription = "Post image",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(200.dp)
-                            .clip(RoundedCornerShape(12.dp)),
-                        contentScale = ContentScale.Crop
-                    )
-                }
-
-                if (post.voiceNoteSeconds != null) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { onPlayVoice() },
-                        color = Emerald50
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = Emerald800, modifier = Modifier.size(18.dp))
-                            Text("Voice Note (${post.voiceNoteSeconds}s) • Tap to listen", fontSize = 12.sp, color = Emerald900, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-                HorizontalDivider(color = Slate100)
-                Spacer(modifier = Modifier.height(8.dp))
-
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        contentPadding = PaddingValues(top = 12.dp, bottom = 32.dp)
+    ) {
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = Amber100),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Amber400)
+            ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        IconButton(onClick = onLike, modifier = Modifier.size(36.dp)) {
-                            Icon(
-                                imageVector = if (post.isLikedByUser) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                                contentDescription = "Like",
-                                tint = if (post.isLikedByUser) UdhaarRed else Slate400,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Text("${post.likesCount}", fontSize = 13.sp, color = Slate600, modifier = Modifier.align(Alignment.CenterVertically))
-
-                        Spacer(modifier = Modifier.width(16.dp))
-
-                        Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null, tint = Slate400, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("${post.commentsCount}", fontSize = 13.sp, color = Slate600)
-                    }
-
-                    IconButton(onClick = { }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Outlined.Share, contentDescription = "Share", tint = Slate400, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Filled.VerifiedUser, contentDescription = null, tint = Amber800)
+                    Column {
+                        Text(
+                            text = "Swappable KycProvider Sandbox (MockKycProvider)",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = Amber900
+                        )
+                        Text(
+                            text = "All verification endpoints return structured realistic data flagged as 'Demo Data' for SIH 2026 jury evaluation.",
+                            fontSize = 10.sp,
+                            color = Amber800
+                        )
                     }
                 }
             }
         }
+
+        // PAN Verification Card
+        panDetails?.let { pan ->
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = PureWhite),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Slate200)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("1. PAN Verification (NDML / NSDL)", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Slate900)
+                            DemoBadge()
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("PAN: ${pan.panNumber}", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Emerald800)
+                        Text("Full Name: ${pan.fullName}", fontSize = 12.sp, color = Slate700)
+                        Text("Status: ${pan.status} • DOB: ${pan.dateOfBirth}", fontSize = 11.sp, color = Slate500)
+                    }
+                }
+            }
+        }
+
+        // Aadhaar Verification Card
+        aadhaarDetails?.let { aadhaar ->
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = PureWhite),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Slate200)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("2. Aadhaar e-KYC (UIDAI Sandbox)", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Slate900)
+                            DemoBadge()
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Masked Aadhaar: ${aadhaar.maskedAadhaar}", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Emerald800)
+                        Text("Name: ${aadhaar.name}", fontSize = 12.sp, color = Slate700)
+                        Text("Address: ${aadhaar.address}", fontSize = 11.sp, color = Slate500)
+                    }
+                }
+            }
+        }
+
+        // Bank Account Link Card
+        bankAccount?.let { bank ->
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = PureWhite),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Slate200)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("3. Account Aggregator (AA) Bank Link", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Slate900)
+                            DemoBadge()
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(bank.bankName, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Emerald800)
+                        Text("Account: ${bank.accountNumberMasked} (IFSC: ${bank.ifscCode})", fontSize = 12.sp, color = Slate700)
+                        Text("Avg Monthly Balance: ₹${String.format(Locale.ROOT, "%,.0f", bank.avgMonthlyBalance)}", fontSize = 11.sp, color = Slate500)
+                    }
+                }
+            }
+        }
+
+        // CIBIL Credit Bureau Card
+        cibilReport?.let { cibil ->
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = PureWhite),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Slate200)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("4. Credit Bureau (CIBIL / Experian)", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Slate900)
+                            DemoBadge()
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Score: ${cibil.score}", fontWeight = FontWeight.Black, fontSize = 20.sp, color = Emerald800)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(cibil.riskCategory, fontSize = 12.sp, color = Slate600, fontWeight = FontWeight.SemiBold)
+                        }
+                        Text("On-Time Repayment: ${cibil.onTimeRepaymentPercent}% • Active Loans: ${cibil.activeLoans}", fontSize = 11.sp, color = Slate500)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DemoBadge() {
+    Surface(
+        color = Amber200,
+        shape = RoundedCornerShape(6.dp)
+    ) {
+        Text(
+            text = "Demo Data",
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Black,
+            color = Amber900,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+        )
     }
 }
