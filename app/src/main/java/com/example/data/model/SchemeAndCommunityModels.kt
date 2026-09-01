@@ -50,18 +50,47 @@ data class BusinessReminder(
     val note: String = ""
 )
 
+enum class PostType(val label: String, val labelHi: String) {
+    SUCCESS("Success", "सफलता"),
+    QUESTION("Question", "प्रश्न"),
+    SCHEME_UPDATE("Update", "अपडेट"),
+    BUSINESS_TIP("Tip", "टिप")
+}
+
 @Entity(tableName = "community_posts")
 data class CommunityPost(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val authorName: String,
-    val authorRole: String, // e.g. "Kirana Owner, Varanasi"
+    val authorRole: String,
     val content: String,
-    val tag: String, // e.g. "#MudraSuccess", "#KiranaProfit", "#AgriDirect"
+    val tag: String,
+    val postType: PostType = PostType.BUSINESS_TIP,
+    val imageUrl: String? = null,
     val likesCount: Int = 12,
     val commentsCount: Int = 3,
     val isLikedByUser: Boolean = false,
-    val voiceNoteSeconds: Int? = null, // audio post duration if voice
+    val voiceNoteSeconds: Int? = null,
     val createdAtFormatted: String = "2 hours ago"
+)
+
+@Entity(tableName = "chat_conversations")
+data class ChatConversation(
+    @PrimaryKey val id: String,
+    val name: String,
+    val lastMessage: String,
+    val time: String,
+    val unreadCount: Int = 0,
+    val isGroup: Boolean = false,
+    val initial: String = "?"
+)
+
+@Entity(tableName = "chat_thread_messages")
+data class ChatThreadMessage(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val conversationId: String,
+    val text: String,
+    val isMine: Boolean,
+    val time: String
 )
 
 data class MandiCommodity(

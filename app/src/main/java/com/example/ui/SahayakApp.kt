@@ -76,32 +76,38 @@ fun SahayakApp(viewModel: SahayakViewModel) {
 
     val isHindi = userProfile.preferredLanguage == AppLanguage.HINDI
 
+    // Community module is a full-screen section with its own internal top bar & bottom nav
+    val isCommunitySection = currentRoute == Screen.CommunityKyc.route
+
     var showManualAddDialog by remember { mutableStateOf(false) }
     var showOcrTextPromptDialog by remember { mutableStateOf(false) }
     var showProfileDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
-            SahayakTopBar(
-                currentLanguage = userProfile.preferredLanguage,
-                onLanguageChange = { viewModel.setLanguage(it) },
-                isSpeaking = isTtsSpeaking,
-                onStopSpeaking = { viewModel.stopSpeaking() },
-                onOpenProfile = { showProfileDialog = true },
-                onOpenKyc = {
-                    navController.navigate(Screen.CommunityKyc.route) {
-                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
+            if (!isCommunitySection) {
+                SahayakTopBar(
+                    currentLanguage = userProfile.preferredLanguage,
+                    onLanguageChange = { viewModel.setLanguage(it) },
+                    isSpeaking = isTtsSpeaking,
+                    onStopSpeaking = { viewModel.stopSpeaking() },
+                    onOpenProfile = { showProfileDialog = true },
+                    onOpenKyc = {
+                        navController.navigate(Screen.CommunityKyc.route) {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
                     }
-                }
-            )
+                )
+            }
         },
         bottomBar = {
-            NavigationBar(
-                containerColor = PureWhite,
-                tonalElevation = 8.dp
-            ) {
+            if (!isCommunitySection) {
+                NavigationBar(
+                    containerColor = PureWhite,
+                    tonalElevation = 8.dp
+                ) {
                 bottomNavScreens.forEach { screen ->
                     val isSelected = currentRoute == screen.route
                     NavigationBarItem(
@@ -142,11 +148,12 @@ fun SahayakApp(viewModel: SahayakViewModel) {
                 }
             }
         }
+        }
     ) { innerPadding ->
         NavHost(
             navController = navController,
             startDestination = Screen.Home.route,
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier.padding(if (isCommunitySection) PaddingValues(0.dp) else innerPadding)
         ) {
             composable(Screen.Home.route) {
                 HomeScreen(
@@ -196,7 +203,18 @@ fun SahayakApp(viewModel: SahayakViewModel) {
             }
 
             composable(Screen.CommunityKyc.route) {
-                CommunityAndKycScreen(viewModel = viewModel)
+                CommunityAndKycScreen(
+                    viewModel = viewModel,
+                    onBack = {
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
             }
         }
     }
