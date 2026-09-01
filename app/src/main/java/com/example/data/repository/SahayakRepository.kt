@@ -24,6 +24,8 @@ class SahayakRepository(
     private val communityDao = database.communityDao()
     private val chatDao = database.chatMessageDao()
     private val documentDao = database.documentDao()
+    private val conversationDao = database.conversationDao()
+    private val threadMessageDao = database.threadMessageDao()
 
     private val _userProfile = MutableStateFlow(UserProfile())
     val userProfile: StateFlow<UserProfile> = _userProfile
@@ -37,6 +39,8 @@ class SahayakRepository(
     val allPosts: Flow<List<CommunityPost>> = communityDao.getAllPosts()
     val chatHistory: Flow<List<ChatMessage>> = chatDao.getAllMessages()
     val allDigitalDocuments: Flow<List<DigitalDocument>> = documentDao.getAllDocuments()
+    val allConversations: Flow<List<ChatConversation>> = conversationDao.getAllConversations()
+    val threadMessages: Flow<List<ChatThreadMessage>> = threadMessageDao.getAllMessages()
 
     init {
         CoroutineScope(Dispatchers.IO).launch {
@@ -88,6 +92,10 @@ class SahayakRepository(
 
     suspend fun saveChatMessage(message: ChatMessage) {
         chatDao.insertMessage(message)
+    }
+
+    suspend fun sendThreadMessage(message: ChatThreadMessage) {
+        threadMessageDao.insertMessages(listOf(message))
     }
 
     suspend fun clearChat() {
@@ -317,40 +325,145 @@ class SahayakRepository(
             reminderDao.insertReminder(r)
         }
 
-        // Initial Community Posts
+        // Initial Community Posts (realistic rural entrepreneur stories)
         val initialPosts = listOf(
             CommunityPost(
                 authorName = "Sunita Devi",
-                authorRole = "Sewing Center & SHG Head, Mirzapur",
-                content = "हमारे महिला समूह ने SahayakAI के खाता रिकॉर्ड से बैंक मैनेजर को ₹80,000 का टर्नओवर दिखाया और हमें बिना किसी बिचौलिए के 4 नई सिलाई मशीनों के लिए मुद्रा लोन मिल गया! 🙏🇮🇳",
-                tag = "#MudraSuccess",
-                likesCount = 38,
-                commentsCount = 7,
+                authorRole = "Kirana Owner • 2h ago",
+                content = "Just upgraded my shop with a new digital weighing scale using the PM Svanidhi loan! The process was much smoother than I expected. Happy to guide anyone applying. ✨",
+                tag = "#SvanidhiSuccess",
+                postType = PostType.SUCCESS,
+                imageUrl = "https://images.unsplash.com/photo-1587653915935-5623d0c949da?w=600",
+                likesCount = 248,
+                commentsCount = 32,
                 voiceNoteSeconds = 42,
-                createdAtFormatted = "3 hours ago"
+                createdAtFormatted = "2h ago"
+            ),
+            CommunityPost(
+                authorName = "Rajesh Patel",
+                authorRole = "Hardware Store • 4h ago",
+                content = "I'm thinking of starting to accept UPI payments for wholesale orders above ₹50,000. Has anyone faced issues with transaction limits or delays with standard merchant accounts?",
+                tag = "#UPIQuestion",
+                postType = PostType.QUESTION,
+                likesCount = 45,
+                commentsCount = 18,
+                voiceNoteSeconds = null,
+                createdAtFormatted = "4h ago"
+            ),
+            CommunityPost(
+                authorName = "Amit Sharma",
+                authorRole = "Sahayak Advisor • 1d ago",
+                content = "The State Government has just announced a 20% subsidy on modern loom upgrades. Deadline to apply is next month. Check the 'Schemes' tab to see if you are eligible!",
+                tag = "#SchemeUpdate",
+                postType = PostType.SCHEME_UPDATE,
+                likesCount = 512,
+                commentsCount = 89,
+                voiceNoteSeconds = 28,
+                createdAtFormatted = "1d ago"
             ),
             CommunityPost(
                 authorName = "Mohan Lal Gupta",
-                authorRole = "Kirana Store, Jaunpur",
+                authorRole = "Kirana Store, Jaunpur • Yesterday",
                 content = "साथियों, थोक मंडी से दाल-तेल सीधे Haat के दिन खरीदने से 10% लागत बचती है। SahayakAI ब्रेक-ईवेन कैलकुलेटर से मैंने अपना दैनिक खर्च ₹300 कम कर लिया है।",
                 tag = "#KiranaProfit",
+                postType = PostType.BUSINESS_TIP,
                 likesCount = 24,
                 commentsCount = 4,
                 voiceNoteSeconds = null,
                 createdAtFormatted = "Yesterday"
             ),
             CommunityPost(
-                authorName = "Rajesh Patel",
-                authorRole = "Dairy & Bio-Fertilizer, Varanasi",
+                authorName = "Geeta Sharma",
+                authorRole = "Dairy Farmer, Varanasi • 3d ago",
                 content = "मंडी में दूध के दाम स्थिर हैं लेकिन चारे की कीमत बढ़ रही है। मैंने AI सलाहकार से पूछकर साइलेज चारा बनाना शुरू किया जिससे 15% बचत हो रही है।",
                 tag = "#DairyTips",
+                postType = PostType.BUSINESS_TIP,
                 likesCount = 19,
                 commentsCount = 2,
                 voiceNoteSeconds = 28,
-                createdAtFormatted = "2 days ago"
+                createdAtFormatted = "3d ago"
+            ),
+            CommunityPost(
+                authorName = "Vikram Singh",
+                authorRole = "Street Vendor, Mirzapur • 5d ago",
+                content = "झुग्गी-झोपड़ी विक्रेताओं के लिए PM SVANidhi का पहला ₹10,000 लोन मिला। ब्याज सब्सिडी सीधे खाते में आती है। किसी से कमीशन मत दो, सीधे बैंक जाओ!",
+                tag = "#SVANidhi",
+                postType = PostType.SUCCESS,
+                likesCount = 77,
+                commentsCount = 9,
+                voiceNoteSeconds = null,
+                createdAtFormatted = "5d ago"
             )
         )
         communityDao.insertPosts(initialPosts)
+
+        // Initial Chat Conversations (realistic rural peer-to-peer chats)
+        val initialConversations = listOf(
+            ChatConversation(
+                id = "rajesh_kumar",
+                name = "Rajesh Kumar",
+                lastMessage = "Bhai, loan ka process kya hai?",
+                time = "10:42 AM",
+                unreadCount = 2,
+                isGroup = false,
+                initial = "R"
+            ),
+            ChatConversation(
+                id = "sunita_devi",
+                name = "Sunita Devi (Maha Laxmi Store)",
+                lastMessage = "Haan, payment receive ho gaya.",
+                time = "Yesterday",
+                unreadCount = 0,
+                isGroup = false,
+                initial = "S"
+            ),
+            ChatConversation(
+                id = "agri_tech_network",
+                name = "Agri-Tech Network",
+                lastMessage = "Amit: Naya beej kahan se liya?",
+                time = "Tuesday",
+                unreadCount = 0,
+                isGroup = true,
+                initial = "A"
+            ),
+            ChatConversation(
+                id = "vikram_auto",
+                name = "Vikram Auto Repairs",
+                lastMessage = "Khata entry check kar lena ek baar.",
+                time = "Monday",
+                unreadCount = 1,
+                isGroup = false,
+                initial = "V"
+            ),
+            ChatConversation(
+                id = "shg_meeting",
+                name = "Mahila SHG - Varanasi",
+                lastMessage = "Sunita: Kal meeting 5 baje hai sab log.",
+                time = "Sunday",
+                unreadCount = 5,
+                isGroup = true,
+                initial = "M"
+            )
+        )
+        conversationDao.insertConversations(initialConversations)
+
+        // Initial Thread Messages for each conversation
+        val initialThreads = listOf(
+            ChatThreadMessage(conversationId = "rajesh_kumar", text = "Bhai, loan ka process kya hai?", isMine = false, time = "10:38 AM"),
+            ChatThreadMessage(conversationId = "rajesh_kumar", text = "Kis loan ki baat kar rahe ho, Mudra ya SVANidhi?", isMine = true, time = "10:40 AM"),
+            ChatThreadMessage(conversationId = "rajesh_kumar", text = "Mudra wala. Bank se directly apply karna hota hai?", isMine = false, time = "10:42 AM"),
+            ChatThreadMessage(conversationId = "rajesh_kumar", text = "Haan, apna Khata report aur Aadhaar leke kisi bhi bank jao. SahayakAI me Report tab me mil jayega.", isMine = true, time = "10:45 AM"),
+            ChatThreadMessage(conversationId = "sunita_devi", text = "Haan, payment receive ho gaya. Thank you!", isMine = false, time = "Yesterday"),
+            ChatThreadMessage(conversationId = "sunita_devi", text = "Aapke 2 cartons kal aur bhej rahe hain. Bill bhi sath me lagega.", isMine = true, time = "Yesterday"),
+            ChatThreadMessage(conversationId = "agri_tech_network", text = "Amit: Naya beej kahan se liya?", isMine = false, time = "Tuesday"),
+            ChatThreadMessage(conversationId = "agri_tech_network", text = "Kisan Bazaar se liya tha, 20% sasta pada.", isMine = true, time = "Tuesday"),
+            ChatThreadMessage(conversationId = "vikram_auto", text = "Khata entry check kar lena ek baar.", isMine = false, time = "Monday"),
+            ChatThreadMessage(conversationId = "vikram_auto", text = "Kal ka kaam ho gaya tha, main abhi entry daal deta hoon.", isMine = true, time = "Monday"),
+            ChatThreadMessage(conversationId = "shg_meeting", text = "Sunita: Kal meeting 5 baje hai sab log.", isMine = false, time = "Sunday"),
+            ChatThreadMessage(conversationId = "shg_meeting", text = "Theek hai, main bachat register le aaungi.", isMine = true, time = "Sunday"),
+            ChatThreadMessage(conversationId = "shg_meeting", text = "Main naya SahayakAI group account bhi bana ke dikhaungi.", isMine = false, time = "Sunday")
+        )
+        threadMessageDao.insertMessages(initialThreads)
     }
 
     private fun getInitialMandiPrices(): List<MandiCommodity> {

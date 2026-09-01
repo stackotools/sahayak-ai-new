@@ -6,7 +6,9 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.example.data.model.BusinessReminder
+import com.example.data.model.ChatConversation
 import com.example.data.model.ChatMessage
+import com.example.data.model.ChatThreadMessage
 import com.example.data.model.CommunityPost
 import com.example.data.model.DigitalDocument
 import com.example.data.model.LedgerEntry
@@ -19,9 +21,11 @@ import com.example.data.model.Scheme
         BusinessReminder::class,
         CommunityPost::class,
         ChatMessage::class,
-        DigitalDocument::class
+        DigitalDocument::class,
+        ChatConversation::class,
+        ChatThreadMessage::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -31,6 +35,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun communityDao(): CommunityDao
     abstract fun chatMessageDao(): ChatMessageDao
     abstract fun documentDao(): DocumentDao
+    abstract fun conversationDao(): ConversationDao
+    abstract fun threadMessageDao(): ThreadMessageDao
 
     companion object {
         @Volatile

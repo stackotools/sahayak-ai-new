@@ -94,6 +94,12 @@ class SahayakViewModel(application: Application) : AndroidViewModel(application)
     val allDigitalDocuments: StateFlow<List<DigitalDocument>> = repository.allDigitalDocuments
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val allConversations: StateFlow<List<ChatConversation>> = repository.allConversations
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val threadMessages: StateFlow<List<ChatThreadMessage>> = repository.threadMessages
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     // Machine Learning Forecasting & Demand Models
     val allCommodityForecasts: List<com.example.data.ml.CommodityMlForecast> =
         com.example.data.ml.MlForecastingEngine.getAllCommodityForecasts()
@@ -141,6 +147,9 @@ class SahayakViewModel(application: Application) : AndroidViewModel(application)
 
     private val _cibilReport = MutableStateFlow<CibilReport?>(null)
     val cibilReport: StateFlow<CibilReport?> = _cibilReport
+
+    private val _selectedChatConversation = MutableStateFlow<ChatConversation?>(null)
+    val selectedChatConversation: StateFlow<ChatConversation?> = _selectedChatConversation
 
     // Reactive Financial Health Score & Bank Report
     val financialHealthScore: StateFlow<FinancialHealthScore> = combine(userProfile, allLedgerEntries) { profile, ledger ->
@@ -470,6 +479,49 @@ class SahayakViewModel(application: Application) : AndroidViewModel(application)
                 createdAtFormatted = "Just now"
             )
             repository.addCommunityPost(newPost)
+        }
+    }
+
+    fun addCommunityPost(content: String, tag: String, type: PostType, voiceSeconds: Int? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val profile = userProfile.value
+            val newPost = CommunityPost(
+                authorName = profile.name,
+                authorRole = "${profile.businessType.title}, ${profile.location.substringBefore(",")}",
+                content = content,
+                tag = if (tag.startsWith("#")) tag else "#$tag",
+                postType = type,
+                likesCount = 1,
+                commentsCount = 0,
+                isLikedByUser = true,
+                voiceNoteSeconds = voiceSeconds,
+                createdAtFormatted = "Just now"
+            )
+            repository.addCommunityPost(newPost)
+        }
+    }
+
+    // --- CHATS ---
+
+    fun openChatConversation(conversation: ChatConversation) {
+        _selectedChatConversation.value = conversation
+    }
+
+    fun closeChatConversation() {
+        _selectedChatConversation.value = null
+    }
+
+    fun sendThreadMessage(text: String) {
+        val conversation = _selectedChatConversation.value ?: return
+        if (text.isBlank()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val msg = ChatThreadMessage(
+                conversationId = conversation.id,
+                text = text,
+                isMine = true,
+                time = "Now"
+            )
+            repository.sendThreadMessage(msg)
         }
     }
 
